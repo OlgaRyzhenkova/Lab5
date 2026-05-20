@@ -1,0 +1,177 @@
+<UserControl x:Class="Lab5_OOP.VoronoiControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="#EEF3F8"
+             FontFamily="Segoe UI"
+             FontSize="14">
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="InkBrush" Color="#152033"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#657084"/>
+        <SolidColorBrush x:Key="LineBrush" Color="#D9E2EE"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#7A3E9D"/>
+        <SolidColorBrush x:Key="AccentDarkBrush" Color="#5B2D78"/>
+
+        <Style x:Key="PanelBorder" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="MinWidth" Value="108"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Margin" Value="0,0,8,8"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentDarkBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+            <Setter Property="Foreground" Value="{StaticResource InkBrush}"/>
+            <Setter Property="Background" Value="#F7FAFC"/>
+            <Setter Property="BorderBrush" Value="#C9D5E3"/>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Padding" Value="8,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#D7E1EC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="GridLinesVisibility" Value="None"/>
+            <Setter Property="RowHeight" Value="32"/>
+            <Setter Property="HeadersVisibility" Value="Column"/>
+            <Setter Property="CanUserAddRows" Value="False"/>
+            <Setter Property="CanUserResizeRows" Value="False"/>
+            <Setter Property="IsReadOnly" Value="True"/>
+            <Setter Property="AutoGenerateColumns" Value="False"/>
+            <Setter Property="AlternatingRowBackground" Value="#F8FBFD"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource PanelBorder}" Padding="18">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel>
+                    <TextBlock Text="Діаграма Вороного" FontSize="25" FontWeight="Bold" Foreground="{StaticResource InkBrush}"/>
+                    <TextBlock Text="Лівий клік додає вершину, правий клік видаляє найближчу. Після кожної зміни зображення перераховується заново."
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <Border Grid.Column="1" Background="#F3EAF8" BorderBrush="#DBC7EA" BorderThickness="1" CornerRadius="7" Padding="12,0" Height="40">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="8" Height="8" Fill="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="VoronoiStatusTextBlock" Text="готово" Foreground="{StaticResource InkBrush}" FontWeight="SemiBold"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260"/>
+                <ColumnDefinition Width="18"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="18"/>
+                <ColumnDefinition Width="330"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource PanelBorder}" Padding="14">
+                <StackPanel>
+                    <TextBlock Text="Керування" FontSize="18" FontWeight="Bold" Foreground="{StaticResource InkBrush}" Margin="0,0,0,12"/>
+
+                    <TextBlock Text="Кількість випадкових вершин" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,6"/>
+                    <ComboBox x:Name="PointCountComboBox" Margin="0,0,0,10"/>
+                    <Button x:Name="GenerateButton" Content="Згенерувати" Style="{StaticResource PrimaryButton}" Click="GenerateButton_Click"/>
+                    <Button Content="Очистити" Style="{StaticResource SecondaryButton}" Click="ClearButton_Click"/>
+
+                    <Separator Margin="0,10,0,12"/>
+
+                    <TextBlock Text="Режим обчислення" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,6"/>
+                    <ComboBox x:Name="ThreadModeComboBox" SelectionChanged="SettingsComboBox_SelectionChanged" Margin="0,0,0,10">
+                        <ComboBoxItem Content="Один потік" Tag="Single"/>
+                        <ComboBoxItem Content="Паралельно областями" Tag="Parallel"/>
+                    </ComboBox>
+
+                    <TextBlock Text="Метрика" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,6"/>
+                    <ComboBox x:Name="MetricComboBox" SelectionChanged="SettingsComboBox_SelectionChanged" Margin="0,0,0,10">
+                        <ComboBoxItem Content="Евклідова" Tag="Euclidean"/>
+                        <ComboBoxItem Content="Манхетенська" Tag="Manhattan"/>
+                        <ComboBoxItem Content="Чебишова" Tag="Chebyshev"/>
+                    </ComboBox>
+
+                    <CheckBox x:Name="UsePruningCheckBox" Content="Відкидати зайві частини порівнянь" IsChecked="True"
+                              Checked="SettingsCheckBox_Changed" Unchecked="SettingsCheckBox_Changed" Margin="0,0,0,12"/>
+
+                    <Separator Margin="0,4,0,12"/>
+
+                    <TextBlock Text="Вилучити найменші локуси" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,6"/>
+                    <StackPanel Orientation="Horizontal">
+                        <ComboBox x:Name="RemovePercentComboBox" Width="82" Margin="0,0,8,0"/>
+                        <Button Content="Вилучити" Style="{StaticResource SecondaryButton}" Click="RemoveSmallestButton_Click"/>
+                    </StackPanel>
+
+                    <Separator Margin="0,14,0,12"/>
+
+                    <TextBlock Text="Статистика останнього рендеру" FontWeight="Bold" Foreground="{StaticResource InkBrush}" Margin="0,0,0,8"/>
+                    <TextBlock x:Name="WallTimeTextBlock" Text="Час: -" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="CpuTimeTextBlock" Text="CPU: -" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="MemoryTextBlock" Text="Пам'ять: -" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="SkippedTextBlock" Text="Відкинуто: -" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource PanelBorder}" Padding="12">
+                <Grid>
+                    <Image x:Name="VoronoiImage" Stretch="Fill"/>
+                    <Canvas x:Name="VoronoiCanvas"
+                            Background="Transparent"
+                            MouseLeftButtonDown="VoronoiCanvas_MouseLeftButtonDown"
+                            MouseRightButtonDown="VoronoiCanvas_MouseRightButtonDown"
+                            SizeChanged="VoronoiCanvas_SizeChanged"/>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="4" Style="{StaticResource PanelBorder}" Padding="14">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Вершини та площі локусів" FontSize="17" FontWeight="Bold"
+                               Foreground="{StaticResource InkBrush}" Margin="0,0,0,10"/>
+                    <DataGrid x:Name="PointsDataGrid" ItemsSource="{Binding Points}">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="" Width="34">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Ellipse Width="13" Height="13" Fill="{Binding Brush}" HorizontalAlignment="Center"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Назва" Binding="{Binding Name}" Width="*"/>
+                            <DataGridTextColumn Header="X" Binding="{Binding XText}" Width="52"/>
+                            <DataGridTextColumn Header="Y" Binding="{Binding YText}" Width="52"/>
+                            <DataGridTextColumn Header="Пікселі" Binding="{Binding PixelCount}" Width="80"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
