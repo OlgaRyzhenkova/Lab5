@@ -1,4 +1,4 @@
-<Window x:Class="Lab5_OOP.MainWindow"
+﻿<Window x:Class="Lab5_OOP.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -119,6 +119,7 @@
                             <ComboBox x:Name="HorseCountComboBox" Width="76" Margin="0,0,14,0" SelectedIndex="1" SelectionChanged="HorseCountComboBox_SelectionChanged"/>
                             <Button x:Name="StartButton" Content="Старт" Style="{StaticResource PrimaryButton}" Click="StartButton_Click"/>
                             <Button x:Name="ResetButton" Content="Скинути" Style="{StaticResource SecondaryButton}" Click="ResetButton_Click"/>
+                            <Button x:Name="NextCameraButton" Content="Камера лідера" ToolTip="Показати рамку камери на коні, який біжить першим" Style="{StaticResource SecondaryButton}" Click="NextCameraButton_Click"/>
                             <Border Background="#E8F6F3" BorderBrush="#BFE2DA" BorderThickness="1" CornerRadius="7" Padding="12,0" Height="40">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <Ellipse Width="8" Height="8" Fill="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
@@ -137,7 +138,7 @@
                     </Grid.ColumnDefinitions>
 
                     <Border Grid.Column="0" Style="{StaticResource PanelBorder}" Padding="16">
-                        <StackPanel>
+                        <StackPanel x:Name="BetPanel">
                             <TextBlock Text="Ставки" FontSize="20" FontWeight="Bold" Foreground="{StaticResource InkBrush}"/>
                             <TextBlock x:Name="BalanceTextBlock" Text="Баланс: 250$" FontSize="16" FontWeight="SemiBold"
                                        Foreground="{StaticResource AccentDarkBrush}" Margin="0,10,0,16"/>
@@ -168,6 +169,7 @@
                                 <Rectangle x:Name="FinishLine" Width="6" Fill="#E63946" Opacity="0.96"/>
                                 <TextBlock x:Name="StartLabel" Text="СТАРТ" Foreground="White" FontWeight="Bold" FontSize="12"/>
                                 <TextBlock x:Name="FinishLabel" Text="ФІНІШ" Foreground="White" FontWeight="Bold" FontSize="12"/>
+                                <Rectangle x:Name="CameraFrame" Width="118" Height="82" RadiusX="6" RadiusY="6" Stroke="#FFD047" StrokeThickness="4" Fill="#20FFD047" Visibility="Collapsed" IsHitTestVisible="False"/>
                             </Canvas>
                         </Grid>
                     </Border>
@@ -187,7 +189,7 @@
                                 <TextBlock Text="коефіцієнти змінюються після гонки" HorizontalAlignment="Right" VerticalAlignment="Center"
                                            Foreground="{StaticResource MutedBrush}"/>
                             </Grid>
-                            <DataGrid x:Name="HorsesDataGrid" ItemsSource="{Binding Horses}">
+                            <DataGrid x:Name="HorsesDataGrid" ItemsSource="{Binding HorsesView}">
                                 <DataGrid.Columns>
                                     <DataGridTemplateColumn Header="" Width="42">
                                         <DataGridTemplateColumn.CellTemplate>

@@ -1,8 +1,10 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
@@ -22,10 +24,9 @@ public partial class MainWindow : Window
     private const double RightPadding = 82;
     private const double TrackTopPadding = 78;
     private const double TrackBottomPadding = 26;
-    private const double BaseSpeed = 3.2;
-
     private readonly ObservableCollection<Horse> horses = [];
     private readonly ObservableCollection<RaceResult> results = [];
+    private readonly ICollectionView horsesView;
     private readonly Dictionary<Horse, Image> horseImages = [];
     private readonly Dictionary<Horse, Border> horseBadges = [];
     private readonly Dictionary<Horse, List<BitmapSource>> horseFrames = [];
@@ -37,20 +38,33 @@ public partial class MainWindow : Window
     private readonly Dictionary<int, double> savedCoefficients = [];
     private readonly List<BitmapSource> frames = [];
     private readonly List<BitmapSource> masks = [];
-    private CancellationTokenSource? accelerationTokenSource;
+    private bool isRenderingFrame;
     private double balance = 250;
     private int selectedBetAmount = 10;
     private int activeBetAmount;
     private Horse? activeBetHorse;
     private int frameIndex;
+    private int cameraHorseIndex = -1;
+    private bool isLeaderCameraEnabled;
+    private double raceFinishX;
 
     public MainWindow()
     {
         InitializeComponent();
 
+        horsesView = CollectionViewSource.GetDefaultView(horses);
+        horsesView.SortDescriptions.Add(new SortDescription(nameof(Horse.X), ListSortDirection.Descending));
+
+        if (horsesView is ICollectionViewLiveShaping liveView && liveView.CanChangeLiveSorting)
+        {
+            liveView.LiveSortingProperties.Add(nameof(Horse.X));
+            liveView.IsLiveSorting = true;
+        }
+
         DataContext = new
         {
             Horses = horses,
+            HorsesView = horsesView,
             Results = results
         };
 
@@ -83,24 +97,19 @@ public partial class MainWindow : Window
         }
 
         CreateRace();
+        raceFinishX = CalculateFinishX();
+        PositionFixedTrackElements();
         activeBetAmount = betAmount;
         activeBetHorse = horses.FirstOrDefault(horse => horse.Name == (BetHorseComboBox.SelectedItem as string));
         balance -= activeBetAmount;
         UpdateBalance();
 
-        foreach (Horse horse in horses)
-        {
-            horse.ChangeAcceleration();
-        }
-
         StartButton.IsEnabled = false;
         HorseCountComboBox.IsEnabled = false;
-        BetHorseComboBox.IsEnabled = false;
+        BetPanel.IsEnabled = false;
         StatusTextBlock.Text = "перегони тривають";
 
         stopwatch.Restart();
-        accelerationTokenSource = new CancellationTokenSource();
-        StartAccelerationTasks(accelerationTokenSource.Token);
         renderTimer.Start();
     }
 
@@ -110,8 +119,32 @@ public partial class MainWindow : Window
         CreateRace();
     }
 
+    private void NextCameraButton_Click(object sender, RoutedEventArgs e)
+    {
+        isLeaderCameraEnabled = !isLeaderCameraEnabled;
+
+        if (isLeaderCameraEnabled)
+        {
+            UpdateLeaderCamera();
+            NextCameraButton.Content = "Вимкнути камеру";
+        }
+        else
+        {
+            cameraHorseIndex = -1;
+            CameraFrame.Visibility = Visibility.Collapsed;
+            NextCameraButton.Content = "Камера лідера";
+        }
+
+        RenderHorses();
+    }
+
     private void BetAmountButton_Click(object sender, RoutedEventArgs e)
     {
+        if (renderTimer.IsEnabled)
+        {
+            return;
+        }
+
         if (sender is not Button button || button.Tag is null || !int.TryParse(button.Tag.ToString(), out int amount))
         {
             return;
@@ -134,37 +167,60 @@ public partial class MainWindow : Window
 
     private void RaceCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
     {
+        if (!renderTimer.IsEnabled)
+        {
+            raceFinishX = CalculateFinishX();
+        }
+
         PositionFixedTrackElements();
         RenderHorses();
     }
 
-    private void RenderTimer_Tick(object? sender, EventArgs e)
+    private async void RenderTimer_Tick(object? sender, EventArgs e)
     {
-        if (horses.Count == 0)
+        if (isRenderingFrame || horses.Count == 0)
         {
             return;
         }
 
-        double finishX = GetFinishX();
-        TimeSpan elapsed = stopwatch.Elapsed;
+        isRenderingFrame = true;
 
-        foreach (Horse horse in horses)
+        try
         {
-            bool wasFinished = horse.IsFinished;
-            horse.Render(BaseSpeed, finishX, elapsed);
+            double finishX = GetFinishX();
+            TimeSpan elapsed = stopwatch.Elapsed;
 
-            if (!wasFinished && horse.IsFinished)
+            Task<RaceMove>[] tasks = horses
+                .Select(horse => Task.Run(() => horse.CalculateMove(finishX, elapsed)))
+                .ToArray();
+
+            RaceMove[] moves = await Task.WhenAll(tasks);
+
+            foreach (RaceMove move in moves)
             {
-                results.Add(new RaceResult(results.Count + 1, horse.Name, horse.RunTime));
+                bool wasFinished = move.Horse.IsFinished;
+                move.Horse.ApplyMove(move);
+
+                if (!wasFinished && move.Horse.IsFinished)
+                {
+                    results.Add(new RaceResult(results.Count + 1, move.Horse.Name, move.Horse.RunTime));
+                }
+            }
+
+            horsesView.Refresh();
+            UpdateLeaderCamera();
+            frameIndex = (frameIndex + 1) % frames.Count;
+            PositionFixedTrackElements();
+            RenderHorses();
+
+            if (horses.All(horse => horse.IsFinished))
+            {
+                StopRace("фініш");
             }
         }
-
-        frameIndex = (frameIndex + 1) % frames.Count;
-        RenderHorses();
-
-        if (horses.All(horse => horse.IsFinished))
+        finally
         {
-            StopRace("фініш");
+            isRenderingFrame = false;
         }
     }
 
@@ -184,6 +240,12 @@ public partial class MainWindow : Window
         RaceCanvas.Children.Add(FinishLine);
         RaceCanvas.Children.Add(StartLabel);
         RaceCanvas.Children.Add(FinishLabel);
+        RaceCanvas.Children.Add(CameraFrame);
+        raceFinishX = CalculateFinishX();
+        cameraHorseIndex = -1;
+        isLeaderCameraEnabled = false;
+        CameraFrame.Visibility = Visibility.Collapsed;
+        NextCameraButton.Content = "Камера лідера";
 
         Color[] colors =
         [
@@ -204,7 +266,8 @@ public partial class MainWindow : Window
             double coefficient = savedCoefficients.TryGetValue(i, out double savedCoefficient)
                 ? savedCoefficient
                 : 1.15 + random.NextDouble() * 1.35;
-            Horse horse = new($"Кінь {i + 1}", colors[i], i, coefficient, random);
+            double baseSpeed = 2.6 + random.NextDouble() * 1.25;
+            Horse horse = new($"Кінь {i + 1}", colors[i], i, baseSpeed, coefficient, random);
             horse.Reset();
             horses.Add(horse);
 
@@ -414,41 +477,6 @@ public partial class MainWindow : Window
         };
     }
 
-    private void StartAccelerationTasks(CancellationToken token)
-    {
-        foreach (Horse horse in horses)
-        {
-            Task.Run(async () =>
-            {
-                try
-                {
-                    while (!token.IsCancellationRequested && !horse.IsFinished)
-                    {
-                        int delay = NextRandom(5000, 10001);
-                        await Task.Delay(delay, token);
-
-                        if (!token.IsCancellationRequested && !horse.IsFinished)
-                        {
-                            await Dispatcher.InvokeAsync(horse.ChangeAcceleration);
-                        }
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    // Race was reset or finished.
-                }
-            }, token);
-        }
-    }
-
-    private int NextRandom(int minValue, int maxValue)
-    {
-        lock (randomLock)
-        {
-            return random.Next(minValue, maxValue);
-        }
-    }
-
     private void RenderHorses()
     {
         if (RaceCanvas.ActualWidth <= 0 || RaceCanvas.ActualHeight <= 0)
@@ -489,6 +517,8 @@ public partial class MainWindow : Window
                 Canvas.SetTop(badge, horseTop + (HorseHeight - 30) / 2);
             }
         }
+
+        PositionCameraFrame(raceTop, laneHeight);
     }
 
     private void PositionFixedTrackElements()
@@ -512,7 +542,46 @@ public partial class MainWindow : Window
         Canvas.SetTop(FinishLabel, 12);
     }
 
+    private void UpdateLeaderCamera()
+    {
+        if (!isLeaderCameraEnabled || horses.Count == 0)
+        {
+            return;
+        }
+
+        Horse leader = horses
+            .OrderByDescending(horse => horse.X)
+            .ThenBy(horse => horse.RunTime == TimeSpan.Zero ? TimeSpan.MaxValue : horse.RunTime)
+            .First();
+        cameraHorseIndex = horses.IndexOf(leader);
+    }
+
+    private void PositionCameraFrame(double raceTop, double laneHeight)
+    {
+        if (!isLeaderCameraEnabled || cameraHorseIndex < 0 || cameraHorseIndex >= horses.Count)
+        {
+            CameraFrame.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        Horse focusedHorse = horses[cameraHorseIndex];
+        double horseLeft = LeftPadding + focusedHorse.X;
+        double horseTop = raceTop + laneHeight * focusedHorse.Lane + Math.Max(3, (laneHeight - HorseHeight) / 2);
+
+        CameraFrame.Width = HorseWidth + 18;
+        CameraFrame.Height = HorseHeight + 16;
+        Canvas.SetLeft(CameraFrame, horseLeft - 9);
+        Canvas.SetTop(CameraFrame, horseTop - 8);
+        Canvas.SetZIndex(CameraFrame, 50);
+        CameraFrame.Visibility = Visibility.Visible;
+    }
+
     private double GetFinishX()
+    {
+        return raceFinishX > 0 ? raceFinishX : CalculateFinishX();
+    }
+
+    private double CalculateFinishX()
     {
         return Math.Max(120, RaceCanvas.ActualWidth - HorseWidth - LeftPadding - RightPadding);
     }
@@ -527,13 +596,10 @@ public partial class MainWindow : Window
             UpdateCoefficientsByResults();
         }
 
-        accelerationTokenSource?.Cancel();
-        accelerationTokenSource?.Dispose();
-        accelerationTokenSource = null;
         stopwatch.Stop();
         StartButton.IsEnabled = true;
         HorseCountComboBox.IsEnabled = true;
-        BetHorseComboBox.IsEnabled = true;
+        BetPanel.IsEnabled = true;
         StatusTextBlock.Text = status;
     }
 

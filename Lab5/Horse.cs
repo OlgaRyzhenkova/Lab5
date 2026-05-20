@@ -7,17 +7,19 @@ namespace Lab5_OOP;
 public sealed class Horse : INotifyPropertyChanged
 {
     private readonly Random random;
+    private readonly object randomLock = new();
     private double x;
     private double acceleration = 1;
     private TimeSpan runTime;
     private double money;
     private double coefficient;
 
-    public Horse(string name, Color color, int lane, double coefficient, Random random)
+    public Horse(string name, Color color, int lane, double baseSpeed, double coefficient, Random random)
     {
         Name = name;
         Color = color;
         Lane = lane;
+        BaseSpeed = baseSpeed;
         this.coefficient = coefficient;
         Brush = new SolidColorBrush(color);
         Brush.Freeze();
@@ -33,6 +35,8 @@ public sealed class Horse : INotifyPropertyChanged
     public SolidColorBrush Brush { get; private set; }
 
     public int Lane { get; private set; }
+
+    public double BaseSpeed { get; private set; }
 
     public double Coefficient
     {
@@ -118,26 +122,43 @@ public sealed class Horse : INotifyPropertyChanged
         Coefficient = Math.Clamp(value, 1.1, 4.0);
     }
 
-    public void Render(double baseSpeed, double finishX, TimeSpan elapsed)
+    public RaceMove CalculateMove(double finishX, TimeSpan elapsed)
+    {
+        if (IsFinished)
+        {
+            return new RaceMove(this, X, Acceleration, false, RunTime);
+        }
+
+        double newAcceleration = ChangeAcceleration();
+        double nextX = Math.Min(finishX, X + BaseSpeed * newAcceleration);
+        bool finished = nextX >= finishX;
+        return new RaceMove(this, nextX, newAcceleration, finished, finished ? elapsed : RunTime);
+    }
+
+    public void ApplyMove(RaceMove move)
     {
         if (IsFinished)
         {
             return;
         }
 
-        X = Math.Min(finishX, X + baseSpeed * Acceleration);
+        Acceleration = move.Acceleration;
+        X = move.X;
 
-        if (X >= finishX)
+        if (move.IsFinished)
         {
             IsFinished = true;
-            RunTime = elapsed;
+            RunTime = move.FinishTime;
             OnPropertyChanged(nameof(IsFinished));
         }
     }
 
-    public void ChangeAcceleration()
+    public double ChangeAcceleration()
     {
-        Acceleration = 0.7 + random.NextDouble() * 0.3;
+        lock (randomLock)
+        {
+            return 0.7 + random.NextDouble() * 0.3;
+        }
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -145,3 +166,5 @@ public sealed class Horse : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
+
+public readonly record struct RaceMove(Horse Horse, double X, double Acceleration, bool IsFinished, TimeSpan FinishTime);
